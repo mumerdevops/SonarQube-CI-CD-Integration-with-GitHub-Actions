@@ -1,0 +1,41 @@
+name: SonarQube Analysis
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  sonarqube:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=main-project
+            -Dsonar.projectName=main-project
+            -Dsonar.sources=.
+
+      - name: Wait for Analysis
+        run: sleep 30
+
+      - name: Download Report from API
+        run: |
+          curl -u "${{ secrets.SONAR_TOKEN }}:" \
+          "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=main-project" \
+          -o sonar-report.json
+
+      - name: Save Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-analysis-report
+          path: sonar-report.json
+
