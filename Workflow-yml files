@@ -1,1 +1,85 @@
+      #SYNC-YML
+
+name: Sync Repos
+
+on:
+  push:
+    branches:
+      - main
+
+YMLjobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v3
+
+      - name: Push to destination repository
+        run: |
+          # 1. Setup Identity
+          git config --global user.email "muhammadumer5689@gmail.com"
+          git config --global user.name "mumerdevops"
+
+          # 2. Clone the backup repo
+          git clone "https://x-access-token:${{ secrets.PAT }}@github.com/mumerdevops/backup-project.git" backup-dir
+          cd backup-dir
+
+          # 3. Add the main project as source
+          git remote add source-repo "https://x-access-token:${{ secrets.PAT }}@github.com/mumerdevops/main-project.git"
+          git fetch source-repo
+
+          # 4. THE FIX: Force the backup branch to match source-repo/main exactly
+          # This deletes the conflicting local history and replaces it with the source history
+          git checkout main
+          git reset --hard source-repo/main
+
+          # 5. Force push to the backup repo
+          # We use --force because we changed the history to match the source
+          git push origin main --force
+        env:
+          PAT: ${{ secrets.PAT }}
+
+        #SONAR-YML
+
+name: SonarQube Analysis
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  sonarqube:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=main-project
+            -Dsonar.projectName=main-project
+            -Dsonar.sources=.
+
+      - name: Wait for Analysis
+        run: sleep 30
+
+      - name: Download Report from API
+        run: |
+          curl -u "${{ secrets.SONAR_TOKEN }}:" \
+          "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=main-project" \
+          -o sonar-report.json
+
+      - name: Save Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-analysis-report
+          path: sonar-report.json
 
